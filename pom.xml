@@ -19,6 +19,11 @@
             <url>http://twitter.com/talios</url>
         </developer>
     </developers>
+    <licenses>
+        <license>
+            <name>Eclipse Public License</name>
+        </license>
+    </licenses>    
     <distributionManagement>
         <repository>
             <id>sonatype-staging</id>
