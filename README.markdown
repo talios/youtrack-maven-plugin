@@ -15,16 +15,24 @@ In order to use this plugin, declare it in your pom as follows:
         <artifactId>youtrack-maven-plugin</artifactId>
         <version>1.3.1</version>
         <configuration>
-          <url>http://your/youtrack/server/here</url>
-          <username>XXX</username>
-          <password>XXX</password>
+          <server>your-server-id</url>
           <project>project-key</project>
-          <descrpition>${project.description}</description>
           <iterationLength>14</iterationLength>
         </configuration>
       </plugin>
       ...
     </plugins>
+
+The plugin requires a server definition to be added to your ~/.m2/settings.xml file:
+
+    <server>
+	  <id>your-server-id</id>
+	  <username>username</username>
+	  <password>password</password>
+	  <configuration>
+        <url>http://youtrack.yourhost.com</url>
+      </configuration>
+	</server>
 
 ## Creating a new Youtrack Version on release
 

@@ -20,8 +20,11 @@ import com.ning.http.client.AsyncCompletionHandlerBase;
 import com.ning.http.client.AsyncHandler;
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.Response;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.settings.Server;
+import org.codehaus.plexus.util.xml.Xpp3Dom;
 import sun.misc.BASE64Encoder;
 
 import java.io.File;
@@ -40,23 +43,23 @@ public class YoutrackMojo extends AbstractMojo {
 
     private static final String AUTHORIZATION = "Authorization";
     private static final String BASIC = "Basic";
+
     /**
-     * @parameter
+     * The current build session instance. This is used for
+     * toolchain manager API calls.
+     *
+     * @parameter expression="${session}"
      * @required
+     * @readonly
      */
-    private String url;
+    private MavenSession session;
+
 
     /**
      * @parameter
      * @required
      */
-    private String username;
-
-    /**
-     * @parameter
-     * @required
-     */
-    private String password;
+    private String server;
 
     /**
      * @parameter
@@ -93,7 +96,19 @@ public class YoutrackMojo extends AbstractMojo {
 
         try {
 
-            String logon = username + ":" + password;
+            Server mavenServer = session.getSettings().getServer(server);
+            String logon = mavenServer.getUsername() + ":" + mavenServer.getPassword();
+
+            System.out.println("config-class: " + mavenServer.getConfiguration().getClass().getName());
+            System.out.println("config: " + mavenServer.getConfiguration());
+
+            Xpp3Dom mavenServerConfiguration = (Xpp3Dom) mavenServer.getConfiguration();
+
+
+            final String url = mavenServerConfiguration.getChild("url").getValue();
+
+            System.out.println("config url is " + url);
+
             final String encodedLogon = new BASE64Encoder().encode(logon.getBytes());
 
             final String baseVersion = version.replace("-SNAPSHOT", "");
