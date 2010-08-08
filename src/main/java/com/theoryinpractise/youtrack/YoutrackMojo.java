@@ -116,19 +116,19 @@ public class YoutrackMojo extends AbstractMojo {
                             // First check the new version doesn't exist
                             if (response.getStatusCode() == 404) {
 
-                                String newUrlWithParams = String.format(
-                                        "%s?description=%s&releaseDate=%s",
-                                        newVersionUrl,
-                                        String.format("Release %s of %s/%s", baseVersion, groupId, artifactId),
-                                        String.valueOf(cal.getTime().getTime()));
+                                final String versionDescription = description.equals(artifactId)
+                                        ? String.format("Release %s of %s/%s", baseVersion, groupId, artifactId)
+                                        : String.format("Release %s of %s/%s - %s", baseVersion, groupId, artifactId, description);
 
+                                final String versionReleaseDate = String.valueOf(cal.getTime().getTime());
+
+                                String newUrlWithParams = String.format("%s?description=%s&releaseDate=%s",
+                                        newVersionUrl, versionDescription, versionReleaseDate);
 
                                 // If not - create it
                                 Future<Response> newVersion = client
                                         .preparePut(newUrlWithParams)
                                         .addHeader(AUTHORIZATION, BASIC + " " + encodedLogon)
-//                                        .addParameter("description", String.format("Release %s of %s/%s", version, groupId, artifactId))
-//                                        .addParameter("releaseDate", String.valueOf(cal.getTime().getTime()))
                                         .execute();
 
                                 return newVersion.get();
