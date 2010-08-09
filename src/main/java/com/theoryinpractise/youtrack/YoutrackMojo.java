@@ -72,56 +72,39 @@ public class YoutrackMojo extends AbstractMojo {
      */
     private Integer iterationLength;
 
-    /**
-     * @parameter expression="${project.version}"
-     */
-    private String version;
-
-    /**
-     * @parameter expression="${project.groupId}"
-     */
-    private String groupId;
-
-    /**
-     * @parameter expression="${project.artifactId}"
-     */
-    private String artifactId;
-
-    /**
-     * @parameter expression="${project.description}"
-     */
-    private String description;
-
     public void execute() throws MojoExecutionException {
 
         try {
 
             Server mavenServer = session.getSettings().getServer(server);
-            String logon = mavenServer.getUsername() + ":" + mavenServer.getPassword();
 
-            System.out.println("config-class: " + mavenServer.getConfiguration().getClass().getName());
-            System.out.println("config: " + mavenServer.getConfiguration());
+            if (mavenServer == null) {
+                throw new MojoExecutionException("No server entry for '" + server + "', check your settings.xml file.");
+            }
+
+            final String groupId = session.getCurrentProject().getGroupId();
+            final String artifactId = session.getCurrentProject().getArtifactId();
+            final String version = session.getCurrentProject().getVersion();
+            final String description = session.getCurrentProject().getDescription();
+
+            String logon = mavenServer.getUsername() + ":" + mavenServer.getPassword();
+            final String encodedLogon = new BASE64Encoder().encode(logon.getBytes());
 
             Xpp3Dom mavenServerConfiguration = (Xpp3Dom) mavenServer.getConfiguration();
 
-
             final String url = mavenServerConfiguration.getChild("url").getValue();
 
-            System.out.println("config url is " + url);
-
-            final String encodedLogon = new BASE64Encoder().encode(logon.getBytes());
-
             final String baseVersion = version.replace("-SNAPSHOT", "");
-            final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s-%s",
-                    url, project, artifactId, baseVersion);
-
+            final String newVersion = String.format("%s-%s", artifactId, baseVersion);
+            final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s",
+                    url, project, newVersion);
 
             final Calendar cal = Calendar.getInstance();
             cal.add(Calendar.DAY_OF_YEAR, iterationLength != null ? iterationLength : 14);
 
             final AsyncHttpClient client = new AsyncHttpClient();
 
-            Future<Response> newVersion = client.prepareGet(newVersionUrl)
+            Future<Response> newVersionResponse = client.prepareGet(newVersionUrl)
                     .addHeader(AUTHORIZATION, BASIC + " " + encodedLogon)
                     .execute(
                     new AsyncCompletionHandlerBase() {
@@ -131,7 +114,9 @@ public class YoutrackMojo extends AbstractMojo {
                             // First check the new version doesn't exist
                             if (response.getStatusCode() == 404) {
 
-                                final String versionDescription = description.equals(artifactId)
+                                getLog().info(String.format("Creating version %s on %s", newVersion, url));
+
+                                final String versionDescription = description == null
                                         ? String.format("Release %s of %s/%s", baseVersion, groupId, artifactId)
                                         : String.format("Release %s of %s/%s - %s", baseVersion, groupId, artifactId, description);
 
@@ -148,6 +133,8 @@ public class YoutrackMojo extends AbstractMojo {
 
                                 return newVersion.get();
 
+                            } else {
+                                getLog().info(String.format("Version %s already exists on %s", newVersion, url));
                             }
 
                             return response;
@@ -157,7 +144,7 @@ public class YoutrackMojo extends AbstractMojo {
             );
 
 
-            Response r = newVersion.get();
+            Response r = newVersionResponse.get();
 
             if (r.getStatusCode() >= 300) {
                 throw new MojoExecutionException(String.format("Unable to create Youtrack project at %s: %s", url, r.getStatusText()));
