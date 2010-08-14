@@ -22,7 +22,6 @@ import java.util.concurrent.TimeoutException;
  */
 public class YoutrackMojo extends AbstractMojo {
 
-
     /**
      * The current build session instance. This is used for
      * toolchain manager API calls.
@@ -62,18 +61,9 @@ public class YoutrackMojo extends AbstractMojo {
             }
 
             Xpp3Dom mavenServerConfiguration = (Xpp3Dom) mavenServer.getConfiguration();
-
             final String url = mavenServerConfiguration.getChild("url").getValue();
 
-            final YoutrackClient client = new YoutrackClient(url, project,
-                    mavenServer.getUsername(), mavenServer.getPassword(), getLog());
-
-
-            final String newVersion = String.format("%s-%s", currentProject.getArtifactId(),
-                    currentProject.getVersion().replace("-SNAPSHOT", ""));
-
-            final String versionReleaseDate = getNextReleaseDate();
-
+            final YoutrackClient client = new YoutrackClient(url, project, mavenServer.getUsername(), mavenServer.getPassword(), getLog());
 
             File releaseFile = new File("release.properties");
             if (releaseFile.exists()) {
@@ -88,12 +78,15 @@ public class YoutrackMojo extends AbstractMojo {
                 String devVersion = String.format("%s-%s", currentProject.getArtifactId(), properties.getProperty(devKey).replace("-SNAPSHOT", ""));
 
                 client.releaseVersion(relVersion);
-                client.createVersion(devVersion, buildYoutrackVersionDescription(currentProject, devVersion), versionReleaseDate);
+                client.createVersion(devVersion, buildYoutrackVersionDescription(currentProject, devVersion), getNextReleaseDate());
                 client.moveOpenIssues(relVersion, devVersion);
 
             } else {
                 // Ad-hoc usage - just create the new/current version if it's not already created
-                client.createVersion(newVersion, buildYoutrackVersionDescription(currentProject), versionReleaseDate);
+                final String newVersion = String.format("%s-%s", currentProject.getArtifactId(),
+                        currentProject.getVersion().replace("-SNAPSHOT", ""));
+
+                client.createVersion(newVersion, buildYoutrackVersionDescription(currentProject), getNextReleaseDate());
             }
 
         } catch (IOException e) {

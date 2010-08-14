@@ -1,14 +1,13 @@
 package com.theoryinpractise.youtrack;
 
 import com.google.common.base.Function;
-import com.ning.http.client.AsyncCompletionHandlerBase;
 import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.AsyncHttpClientConfig;
 import com.ning.http.client.Response;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
 import org.jdom.Document;
 import org.jdom.Element;
+import org.jdom.JDOMException;
 import org.jdom.input.SAXBuilder;
 import sun.misc.BASE64Encoder;
 
@@ -17,8 +16,6 @@ import java.net.URLEncoder;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -35,118 +32,82 @@ public class YoutrackClient {
 
     private String url;
     private String project;
-    private String username;
     private String authorization;
     private final Log log;
 
     public YoutrackClient(String url, String project, String username, String password, Log log) {
         this.url = url;
         this.project = project;
-        this.username = username;
         this.authorization = new BASE64Encoder().encode((username + ":" + password).getBytes());
         this.log = log;
-
     }
 
     private AsyncHttpClient getHttpClient() {
-        return new AsyncHttpClient(new AsyncHttpClientConfig.Builder()
-                .setKeepAlive(false)
-                .build());
+        return new AsyncHttpClient();
+    }
+
+    private boolean doesVersionExist(final String version) {
+
+        try {
+            final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s", url, project, version);
+            Response response = getHttpClient().prepareGet(newVersionUrl)
+                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .execute()
+                    .get();
+
+            return response.getStatusCode() == 200;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     public void createVersion(final String newVersion, final String versionDescription, final String versionReleaseDate) throws IOException, ExecutionException, InterruptedException, MojoExecutionException, TimeoutException {
 
-        final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s",
-                url, project, newVersion);
+        // First check the new version doesn't exist
+        if (!doesVersionExist(newVersion)) {
 
+            final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s", url, project, newVersion);
 
-        Future<Response> newVersionResponse = getHttpClient().prepareGet(newVersionUrl)
-                .addHeader(AUTHORIZATION, BASIC + " " + authorization)
-                .execute(
-                        new AsyncCompletionHandlerBase() {
-                            @Override
-                            public Response onCompleted(Response response) throws Exception {
+            log.info(String.format("Creating version %s on %s", newVersion, url));
 
-                                // First check the new version doesn't exist
-                                if (response.getStatusCode() == 404) {
+            String newUrlWithParams = String.format("%s?description=%s&releaseDate=%s",
+                    newVersionUrl, versionDescription, versionReleaseDate);
 
-                                    log.info(String.format("Creating version %s on %s", newVersion, url));
+            // If not - create it
+            getHttpClient().preparePut(newUrlWithParams)
+                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .execute()
+                    .get();
 
-                                    String newUrlWithParams = String.format("%s?description=%s&releaseDate=%s",
-                                            newVersionUrl, versionDescription, versionReleaseDate);
-
-                                    // If not - create it
-                                    getHttpClient().preparePut(newUrlWithParams)
-                                            .addHeader(AUTHORIZATION, BASIC + " " + authorization)
-                                            .execute()
-                                            .get();
-
-                                    return response;
-
-                                } else {
-                                    log.info(String.format("Version %s already exists on %s", newVersion, url));
-                                }
-
-                                return response;
-
-                            }
-                        }
-                );
-
-
-        Response r = newVersionResponse.get(10, TimeUnit.MINUTES);
-
-        if (r.getStatusCode() >= 300) {
-            throw new MojoExecutionException(String.format("Unable to create Youtrack project at %s: %s", url, r.getStatusText()));
+        } else {
+            log.info(String.format("Version %s already exists on %s", newVersion, url));
         }
 
     }
 
     public void releaseVersion(final String version) throws IOException, ExecutionException, InterruptedException, MojoExecutionException, TimeoutException {
-        final String versionUrl = String.format("%s/rest/admin/project/%s/version/%s", this.url, project, version);
 
-        Future<Response> newVersionResponse = getHttpClient().prepareGet(versionUrl)
-                .addHeader(AUTHORIZATION, BASIC + " " + authorization)
-                .execute(
-                        new AsyncCompletionHandlerBase() {
-                            @Override
-                            public Response onCompleted(Response response) throws Exception {
+        // First check the version exists
+        if (doesVersionExist(version)) {
 
-                                new Exception().printStackTrace();
+            log.info(String.format("Releasing version %s on %s", version, YoutrackClient.this.url));
 
-                                // First check the version exists
-                                if (response.getStatusCode() == 200) {
+            final String versionUrl = String.format("%s/rest/admin/project/%s/version/%s", this.url, project, version);
+            String newUrlWithParams = String.format("%s?isReleased=true&releaseDate=%s",
+                    versionUrl, String.valueOf(new Date().getTime()));
 
-                                    log.info(String.format("Releasing version %s on %s", version, YoutrackClient.this.url));
+            getHttpClient().preparePost(newUrlWithParams)
+                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .execute()
+                    .get();
 
-                                    String newUrlWithParams = String.format("%s?isReleased=true&releaseDate=%s",
-                                            versionUrl, String.valueOf(new Date().getTime()));
-
-                                    try {
-                                        getHttpClient().preparePost(newUrlWithParams)
-                                                .addHeader(AUTHORIZATION, BASIC + " " + authorization)
-                                                .execute()
-                                                .get();
-                                    } catch (Exception e) {
-                                        e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                                    }
-
-                                    return response;
-                                } else {
-                                    throw new MojoExecutionException(String.format("Version %s doesn't exist on %s", version, YoutrackClient.this.url));
-                                }
-                            }
-                        });
-
-        Response r = newVersionResponse.get(10, TimeUnit.MINUTES);
-
-        if (r.getStatusCode() >= 300) {
-            throw new MojoExecutionException(String.format("Unable to release Youtrack project at %s: %s", url, r.getStatusText()));
+        } else {
+            throw new MojoExecutionException(String.format("Version %s doesn't exist on %s", version, YoutrackClient.this.url));
         }
-
     }
 
-    public void moveOpenIssues(final String originalVersion, final String newVersion) throws IOException, ExecutionException, InterruptedException {
+    public void moveOpenIssues(final String originalVersion, final String newVersion) throws IOException, ExecutionException, InterruptedException, MojoExecutionException {
 
         log.info(String.format("Moving open issues from version %s to %s on %s", originalVersion, newVersion, url));
 
@@ -168,52 +129,49 @@ public class YoutrackClient {
                             .execute()
                             .get();
 
-                } catch (InterruptedException e) {
-                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                } catch (ExecutionException e) {
-                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                } catch (IOException e) {
-                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    return String.format("Movied issue %s from version %s to %s", id, originalVersion, newVersion);
+
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
 
-                return String.format("Movied issue %s from version %s to %s", id, originalVersion, newVersion);
             }
         });
 
     }
 
 
-    public void withIssues(String filter, final Function<Element, String> issueFunction) throws IOException, ExecutionException, InterruptedException {
-
-        // "http://youtrack.smx.co.nz/rest/project/issues/SMX3?filter=fix%20for:%20smx3.partyresource-2.6.2%20state:%20Open"
+    private void withIssues(String filter, final Function<Element, String> issueFunction) throws IOException, ExecutionException, InterruptedException, MojoExecutionException {
 
         String issueUrl = String.format("%s/rest/project/issues/%s?filter=%s", url, project, URLEncoder.encode(filter, "UTF-8"));
 
         log.debug("Loading issues from " + issueUrl);
 
-        getHttpClient().prepareGet(issueUrl)
+        Response response = getHttpClient().prepareGet(issueUrl)
                 .addHeader(AUTHORIZATION, BASIC + " " + authorization)
-                .execute(
-                        new AsyncCompletionHandlerBase() {
-                            @Override
-                            public Response onCompleted(Response response) throws Exception {
-                                // First check the version exists
-                                if (response.getStatusCode() == 200) {
+                .execute()
+                .get();
 
-                                    SAXBuilder builder = new SAXBuilder();
-                                    Document doc = builder.build(response.getResponseBodyAsStream());
+        // First check the version exists
+        if (response.getStatusCode() == 200) {
 
-                                    List<Element> issues = doc.getRootElement().getChildren("issue");
-                                    for (Element issue : issues) {
-                                        String logLine = issueFunction.apply(issue);
-                                        log.info(logLine);
-                                    }
+            SAXBuilder builder = new SAXBuilder();
+            try {
+                Document doc = builder.build(response.getResponseBodyAsStream());
 
-                                }
+                List<Element> issues = doc.getRootElement().getChildren("issue");
 
-                                return response;
-                            }
-                        }).get();
+                for (Element issue : issues) {
+                    String logLine = issueFunction.apply(issue);
+                    log.info(logLine);
+                }
+
+            } catch (JDOMException e) {
+                throw new MojoExecutionException(e.getMessage());
+            }
+
+        }
+
     }
 
 }
