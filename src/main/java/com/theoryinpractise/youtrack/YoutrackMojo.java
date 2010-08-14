@@ -1,32 +1,27 @@
 package com.theoryinpractise.youtrack;
 
-import com.ning.http.client.AsyncCompletionHandlerBase;
-import com.ning.http.client.AsyncHandler;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.Response;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.project.MavenProject;
 import org.apache.maven.settings.Server;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
-import sun.misc.BASE64Encoder;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.Calendar;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Goal which touches a timestamp file.
  *
- * @goal create-version
+ * @goal update-version
  */
 public class YoutrackMojo extends AbstractMojo {
 
-    private static final String AUTHORIZATION = "Authorization";
-    private static final String BASIC = "Basic";
 
     /**
      * The current build session instance. This is used for
@@ -59,81 +54,47 @@ public class YoutrackMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
 
         try {
-
-            Server mavenServer = session.getSettings().getServer(server);
+            final Server mavenServer = session.getSettings().getServer(server);
+            final MavenProject currentProject = session.getCurrentProject();
 
             if (mavenServer == null) {
                 throw new MojoExecutionException("No server entry for '" + server + "', check your settings.xml file.");
             }
 
-            final String groupId = session.getCurrentProject().getGroupId();
-            final String artifactId = session.getCurrentProject().getArtifactId();
-            final String version = session.getCurrentProject().getVersion();
-            final String description = session.getCurrentProject().getDescription();
-
-            String logon = mavenServer.getUsername() + ":" + mavenServer.getPassword();
-            final String encodedLogon = new BASE64Encoder().encode(logon.getBytes());
-
             Xpp3Dom mavenServerConfiguration = (Xpp3Dom) mavenServer.getConfiguration();
 
             final String url = mavenServerConfiguration.getChild("url").getValue();
 
-            final String baseVersion = version.replace("-SNAPSHOT", "");
-            final String newVersion = String.format("%s-%s", artifactId, baseVersion);
-            final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s",
-                    url, project, newVersion);
-
-            final Calendar cal = Calendar.getInstance();
-            cal.add(Calendar.DAY_OF_YEAR, iterationLength != null ? iterationLength : 14);
-
-            final AsyncHttpClient client = new AsyncHttpClient();
-
-            Future<Response> newVersionResponse = client.prepareGet(newVersionUrl)
-                    .addHeader(AUTHORIZATION, BASIC + " " + encodedLogon)
-                    .execute(
-                    new AsyncCompletionHandlerBase() {
-                        @Override
-                        public Response onCompleted(Response response) throws Exception {
-
-                            // First check the new version doesn't exist
-                            if (response.getStatusCode() == 404) {
-
-                                getLog().info(String.format("Creating version %s on %s", newVersion, url));
-
-                                final String versionDescription = description == null
-                                        ? String.format("Release %s of %s/%s", baseVersion, groupId, artifactId)
-                                        : String.format("Release %s of %s/%s - %s", baseVersion, groupId, artifactId, description);
-
-                                final String versionReleaseDate = String.valueOf(cal.getTime().getTime());
-
-                                String newUrlWithParams = String.format("%s?description=%s&releaseDate=%s",
-                                        newVersionUrl, versionDescription, versionReleaseDate);
-
-                                // If not - create it
-                                Future<Response> newVersion = client
-                                        .preparePut(newUrlWithParams)
-                                        .addHeader(AUTHORIZATION, BASIC + " " + encodedLogon)
-                                        .execute();
-
-                                return newVersion.get();
-
-                            } else {
-                                getLog().info(String.format("Version %s already exists on %s", newVersion, url));
-                            }
-
-                            return response;
-
-                        }
-                    }
-            );
+            final YoutrackClient client = new YoutrackClient(url, project,
+                    mavenServer.getUsername(), mavenServer.getPassword(), getLog());
 
 
-            Response r = newVersionResponse.get();
+            final String newVersion = String.format("%s-%s", currentProject.getArtifactId(),
+                    currentProject.getVersion().replace("-SNAPSHOT", ""));
 
-            if (r.getStatusCode() >= 300) {
-                throw new MojoExecutionException(String.format("Unable to create Youtrack project at %s: %s", url, r.getStatusText()));
+            final String versionReleaseDate = getNextReleaseDate();
+
+
+            File releaseFile = new File("release.properties");
+            if (releaseFile.exists()) {
+                // During release, create new version, release old version, migrate tickets
+                Properties properties = new Properties();
+                properties.load(new FileReader(releaseFile));
+
+                String relKey = "project.rel." + currentProject.getGroupId() + ":" + currentProject.getArtifactId();
+                String devKey = "project.dev." + currentProject.getGroupId() + ":" + currentProject.getArtifactId();
+
+                String relVersion = String.format("%s-%s", currentProject.getArtifactId(), properties.getProperty(relKey));
+                String devVersion = String.format("%s-%s", currentProject.getArtifactId(), properties.getProperty(devKey).replace("-SNAPSHOT", ""));
+
+                client.releaseVersion(relVersion);
+                client.createVersion(devVersion, buildYoutrackVersionDescription(currentProject, devVersion), versionReleaseDate);
+                client.moveOpenIssues(relVersion, devVersion);
+
+            } else {
+                // Ad-hoc usage - just create the new/current version if it's not already created
+                client.createVersion(newVersion, buildYoutrackVersionDescription(currentProject), versionReleaseDate);
             }
-
 
         } catch (IOException e) {
             throw new MojoExecutionException(e.getMessage());
@@ -141,8 +102,29 @@ public class YoutrackMojo extends AbstractMojo {
             throw new MojoExecutionException(e.getMessage());
         } catch (ExecutionException e) {
             throw new MojoExecutionException(e.getMessage());
+        } catch (TimeoutException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
         }
 
 
     }
+
+    private String getNextReleaseDate() {
+        final Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.DAY_OF_YEAR, iterationLength != null ? iterationLength : 14);
+        return String.valueOf(cal.getTime().getTime());
+    }
+
+    private String buildYoutrackVersionDescription(MavenProject project) {
+        return buildYoutrackVersionDescription(project, project.getVersion());
+    }
+
+    private String buildYoutrackVersionDescription(MavenProject project, final String version) {
+        return String.format(
+                "Release %s of %s/%s",
+                version.replace("-SNAPSHOT", ""),
+                project.getGroupId(),
+                project.getArtifactId());
+    }
+
 }
