@@ -2,7 +2,7 @@ Welcome to the youtrack-maven-plugin for Apache Maven 2.
 
 ## Available Goals
 
-  * youtrack:create-version
+  * youtrack:update-version
 
 ## Configuring the plugin
 
@@ -26,13 +26,13 @@ In order to use this plugin, declare it in your pom as follows:
 The plugin requires a server definition to be added to your ~/.m2/settings.xml file:
 
     <server>
-	  <id>your-server-id</id>
-	  <username>username</username>
-	  <password>password</password>
-	  <configuration>
+      <id>your-server-id</id>
+      <username>username</username>
+      <password>password</password>
+      <configuration>
         <url>http://youtrack.yourhost.com</url>
       </configuration>
-	</server>
+    </server>
 
 ## Creating a new Youtrack Version on release
 
@@ -48,10 +48,14 @@ This can be configured by adding the youtrack-maven-plugin to your maven-release
         <artifactId>maven-release-plugin</artifactId>
         <version>2.0</version>
         <configuration>
-          <preparationGoals>clean verify</preparationGoals>
-          <goals>deploy youtrack:create-version</goals>
+          <preparationGoals>clean verify youtrack:update-version</preparationGoals>
+          <goals>deploy</goals>
         </configuration>
       </plugin>
       ...
     </plugins>
+
+When run during a release ( or more, when a release.properties file exists in the current directory ), then the plugin
+will release the OLD version in Youtrack, create the new version, and move any unresolved tickets from the old version
+to the new.
 
