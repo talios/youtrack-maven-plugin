@@ -183,7 +183,7 @@ public class YoutrackChangesMojo extends AbstractYoutrackMojo {
         }
 
         public String get(String key, String defaultValue) {
-            return containsKey(key) ? key : defaultValue;
+            return containsKey(key) ? get(key) : defaultValue;
         }
 
     }
