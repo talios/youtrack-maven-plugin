@@ -1,14 +1,22 @@
 package com.theoryinpractise.youtrack;
 
+import com.google.common.base.Function;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.settings.Server;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
+import org.jdom.Document;
+import org.jdom.Element;
+import org.jdom.JDOMException;
+import org.jdom.input.SAXBuilder;
+import org.jdom.output.Format;
+import org.jdom.output.XMLOutputter;
 
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Calendar;
 import java.util.Properties;
@@ -20,35 +28,7 @@ import java.util.concurrent.TimeoutException;
  *
  * @goal update-version
  */
-public class YoutrackMojo extends AbstractMojo {
-
-    /**
-     * The current build session instance. This is used for
-     * toolchain manager API calls.
-     *
-     * @parameter expression="${session}"
-     * @required
-     * @readonly
-     */
-    private MavenSession session;
-
-
-    /**
-     * @parameter
-     * @required
-     */
-    private String server;
-
-    /**
-     * @parameter
-     * @required
-     */
-    private String project;
-
-    /**
-     * @parameter
-     */
-    private Integer iterationLength;
+public class YoutrackVersionMojo extends AbstractYoutrackMojo {
 
     public void execute() throws MojoExecutionException {
 
@@ -80,6 +60,9 @@ public class YoutrackMojo extends AbstractMojo {
                 client.releaseVersion(relVersion);
                 client.createVersion(devVersion, buildYoutrackVersionDescription(currentProject, devVersion), getNextReleaseDate());
                 client.moveOpenIssues(relVersion, devVersion);
+
+
+//                mergeMavenChanges(client, relVersion);
 
             } else {
                 // Ad-hoc usage - just create the new/current version if it's not already created

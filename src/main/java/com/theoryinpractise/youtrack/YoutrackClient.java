@@ -141,7 +141,7 @@ public class YoutrackClient {
     }
 
 
-    private void withIssues(String filter, final Function<Element, String> issueFunction) throws IOException, ExecutionException, InterruptedException, MojoExecutionException {
+    public void withIssues(String filter, final Function<Element, String> issueFunction) throws IOException, ExecutionException, InterruptedException, MojoExecutionException {
 
         String issueUrl = String.format("%s/rest/project/issues/%s?filter=%s", url, project, URLEncoder.encode(filter, "UTF-8"));
 
