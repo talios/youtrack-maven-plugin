@@ -2,6 +2,7 @@ package com.theoryinpractise.youtrack;
 
 import com.google.common.base.Function;
 import com.ning.http.client.AsyncHttpClient;
+import com.ning.http.client.Realm;
 import com.ning.http.client.Response;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
@@ -9,7 +10,6 @@ import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.JDOMException;
 import org.jdom.input.SAXBuilder;
-import sun.misc.BASE64Encoder;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -27,18 +27,15 @@ import java.util.concurrent.TimeoutException;
  */
 public class YoutrackClient {
 
-    private static final String AUTHORIZATION = "Authorization";
-    private static final String BASIC = "Basic";
-
     private String url;
     private String project;
-    private String authorization;
     private final Log log;
+    private Realm realm;
 
     public YoutrackClient(String url, String project, String username, String password, Log log) {
         this.url = url;
         this.project = project;
-        this.authorization = new BASE64Encoder().encode((username + ":" + password).getBytes());
+        this.realm = new Realm.RealmBuilder().setPrincipal(username).setPassword(password).build();
         this.log = log;
     }
 
@@ -51,7 +48,7 @@ public class YoutrackClient {
         try {
             final String newVersionUrl = String.format("%s/rest/admin/project/%s/version/%s", url, project, version);
             Response response = getHttpClient().prepareGet(newVersionUrl)
-                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .setRealm(realm)
                     .execute()
                     .get();
 
@@ -76,7 +73,7 @@ public class YoutrackClient {
 
             // If not - create it
             getHttpClient().preparePut(newUrlWithParams)
-                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .setRealm(realm)
                     .execute()
                     .get();
 
@@ -98,7 +95,7 @@ public class YoutrackClient {
                     versionUrl, String.valueOf(new Date().getTime()));
 
             getHttpClient().preparePost(newUrlWithParams)
-                    .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                    .setRealm(realm)
                     .execute()
                     .get();
 
@@ -123,7 +120,7 @@ public class YoutrackClient {
                     final String issueUrl = String.format("%s/rest/issue/%s/execute", url, id);
 
                     getHttpClient().preparePost(issueUrl)
-                            .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                            .setRealm(realm)
                             .addParameter("command", command)
                             .addParameter("comment", comment)
                             .execute()
@@ -143,12 +140,12 @@ public class YoutrackClient {
 
     public void withIssues(String filter, final Function<Element, String> issueFunction) throws IOException, ExecutionException, InterruptedException, MojoExecutionException {
 
-        String issueUrl = String.format("%s/rest/project/issues/%s?filter=%s", url, project, URLEncoder.encode(filter, "UTF-8"));
+        String issueUrl = String.format("%s/rest/project/issues/%s?max=100&filter=%s", url, project, URLEncoder.encode(filter, "UTF-8"));
 
         log.debug("Loading issues from " + issueUrl);
 
         Response response = getHttpClient().prepareGet(issueUrl)
-                .addHeader(AUTHORIZATION, BASIC + " " + authorization)
+                .setRealm(realm)
                 .execute()
                 .get();
 

@@ -50,15 +50,7 @@ public class YoutrackChangesMojo extends AbstractYoutrackMojo {
                 properties.load(new FileReader(releaseFile));
 
                 String relKey = "project.rel." + currentProject.getGroupId() + ":" + currentProject.getArtifactId();
-                String devKey = "project.dev." + currentProject.getGroupId() + ":" + currentProject.getArtifactId();
-
                 String relVersion = String.format("%s-%s", currentProject.getArtifactId(), properties.getProperty(relKey));
-                String devVersion = String.format("%s-%s", currentProject.getArtifactId(), properties.getProperty(devKey).replace("-SNAPSHOT", ""));
-
-                client.releaseVersion(relVersion);
-                client.createVersion(devVersion, buildYoutrackVersionDescription(currentProject, devVersion), getNextReleaseDate());
-                client.moveOpenIssues(relVersion, devVersion);
-
 
                 mergeMavenChanges(client, relVersion);
 
@@ -67,7 +59,6 @@ public class YoutrackChangesMojo extends AbstractYoutrackMojo {
                 final String newVersion = String.format("%s-%s", currentProject.getArtifactId(),
                         currentProject.getVersion().replace("-SNAPSHOT", ""));
 
-//                client.createVersion(newVersion, buildYoutrackVersionDescription(currentProject), getNextReleaseDate());
                 mergeMavenChanges(client, newVersion);
             }
 
@@ -76,8 +67,6 @@ public class YoutrackChangesMojo extends AbstractYoutrackMojo {
         } catch (InterruptedException e) {
             throw new MojoExecutionException(e.getMessage());
         } catch (ExecutionException e) {
-            throw new MojoExecutionException(e.getMessage());
-        } catch (TimeoutException e) {
             throw new MojoExecutionException(e.getMessage());
         }
 
@@ -183,7 +172,7 @@ public class YoutrackChangesMojo extends AbstractYoutrackMojo {
         }
 
         public String get(String key, String defaultValue) {
-            return containsKey(key) ? key : defaultValue;
+            return containsKey(key) ? get(key) : defaultValue;
         }
 
     }
