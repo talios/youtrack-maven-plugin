@@ -35,7 +35,11 @@ public class YoutrackClient {
     public YoutrackClient(String url, String project, String username, String password, Log log) {
         this.url = url;
         this.project = project;
-        this.realm = new Realm.RealmBuilder().setPrincipal(username).setPassword(password).build();
+        this.realm = new Realm.RealmBuilder()
+                .setPrincipal(username)
+                .setPassword(password)
+                .setUsePreemptiveAuth(true)
+                .build();
         this.log = log;
     }
 
