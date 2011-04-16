@@ -13,7 +13,7 @@ In order to use this plugin, declare it in your pom as follows:
       <plugin>
         <groupId>com.theoryinpractise</groupId>
         <artifactId>youtrack-maven-plugin</artifactId>
-        <version>1.3.1</version>
+        <version>1.0.8</version>
         <configuration>
           <server>your-server-id</url>
           <project>project-key</project>
