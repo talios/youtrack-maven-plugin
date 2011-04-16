@@ -1,5 +1,6 @@
 package com.theoryinpractise.youtrack;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.Realm;
@@ -39,6 +40,7 @@ public class YoutrackClient {
                 .setPrincipal(username)
                 .setPassword(password)
                 .setUsePreemptiveAuth(true)
+                .setScheme(Realm.AuthScheme.BASIC)
                 .build();
         this.log = log;
     }
@@ -73,7 +75,7 @@ public class YoutrackClient {
             log.info(String.format("Creating version %s on %s", newVersion, url));
 
             String newUrlWithParams = String.format("%s?description=%s&releaseDate=%s",
-                    newVersionUrl, versionDescription, versionReleaseDate);
+                    newVersionUrl, URLEncoder.encode(versionDescription, Charsets.UTF_8.name()), versionReleaseDate);
 
             // If not - create it
             getHttpClient().preparePut(newUrlWithParams)
@@ -120,7 +122,6 @@ public class YoutrackClient {
                 try {
                     final String command = String.format("fixed in %s", newVersion);
                     final String comment = String.format("Unfinished issue moved issue from %s to %s", originalVersion, newVersion);
-
                     final String issueUrl = String.format("%s/rest/issue/%s/execute", url, id);
 
                     getHttpClient().preparePost(issueUrl)
